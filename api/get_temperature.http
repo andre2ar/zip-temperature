@@ -1,0 +1,5 @@
+### Get temperature
+GET localhost:8080/api/v1/temperature/07042090 HTTP/1.1
+Host: localhost:8080
+Content-Type: application/json
+
