@@ -20,3 +20,7 @@ Examples request can be found on api folder.
 
 To be able to properly run the server um must add a valid WEATHER_API_KEY on app.env file. Might be necessary to restart
 the server after editing app.env file.
+
+GCP URL:
+
+https://zip-temperature-drt52ooijq-uk.a.run.app
