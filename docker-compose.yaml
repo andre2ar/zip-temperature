@@ -3,7 +3,7 @@ services:
   zip-temperature:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     command: bash .docker/start.sh
     restart: "no"
     container_name: "zip-temperature"

@@ -73,13 +73,13 @@ func getRequest(url string) (*http.Response, error) {
 	}
 
 	res, err := http.DefaultClient.Do(req)
-	if res.StatusCode == fiber.StatusBadRequest {
-		return nil, errors.New("Bad Request")
-	}
-
 	if err != nil {
 		log.Println(err)
 		return nil, err
+	}
+
+	if res.StatusCode == fiber.StatusBadRequest {
+		return nil, errors.New("bad request")
 	}
 
 	return res, nil
