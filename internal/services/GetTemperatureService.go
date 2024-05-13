@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 )
 
 func GetTemperatures(app *entity.App, zipcode string) (*dto.TemperatureResponseDto, error) {
@@ -30,9 +31,10 @@ func GetTemperatures(app *entity.App, zipcode string) (*dto.TemperatureResponseD
 }
 
 func getViaCep(zipcode string) (*dto.ViaCepResponse, error) {
-	url := "https://viacep.com.br/ws/" + zipcode + "/json"
-	res, err := getRequest(url)
+	uri := "https://viacep.com.br/ws/" + zipcode + "/json"
+	res, err := getRequest(uri)
 	if err != nil {
+		log.Println(err)
 		return nil, err
 	}
 	defer res.Body.Close()
@@ -48,8 +50,15 @@ func getViaCep(zipcode string) (*dto.ViaCepResponse, error) {
 }
 
 func getWeatherApi(city string, key string) (*dto.WeatherAPIResponse, error) {
-	url := "http://api.weatherapi.com/v1/current.json?key=" + key + "&q=" + city
-	res, err := getRequest(url)
+	baseUrl, _ := url.Parse("http://api.weatherapi.com/v1/current.json")
+
+	params := url.Values{}
+	params.Add("q", city)
+	params.Add("key", key)
+
+	baseUrl.RawQuery = params.Encode()
+
+	res, err := getRequest(baseUrl.String())
 	if err != nil {
 		return nil, err
 	}
@@ -65,8 +74,8 @@ func getWeatherApi(city string, key string) (*dto.WeatherAPIResponse, error) {
 	return &weatherAPIResponse, nil
 }
 
-func getRequest(url string) (*http.Response, error) {
-	req, err := http.NewRequest("GET", url, nil)
+func getRequest(uri string) (*http.Response, error) {
+	req, err := http.NewRequest("GET", uri, nil)
 	if err != nil {
 		log.Println(err)
 		return nil, err
