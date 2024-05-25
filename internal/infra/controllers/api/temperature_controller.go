@@ -4,6 +4,8 @@ import (
 	"github.com/andre2ar/zip-temperature/internal/entity"
 	"github.com/andre2ar/zip-temperature/internal/services"
 	"github.com/gofiber/fiber/v2"
+	"go.opentelemetry.io/otel/attribute"
+	oteltrace "go.opentelemetry.io/otel/trace"
 	"regexp"
 	"strings"
 )
@@ -20,6 +22,9 @@ func GetTemperature(app *entity.App) fiber.Handler {
 			})
 			return nil
 		}
+
+		_, span := app.Tracer.Start(ctx.UserContext(), "GetTemperature", oteltrace.WithAttributes(attribute.String("zipcode", zipcode)))
+		defer span.End()
 
 		temperatures, err := services.GetTemperatures(app, zipcode)
 		if err != nil {
