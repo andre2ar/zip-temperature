@@ -1,4 +1,19 @@
 services:
+  validator:
+    build:
+      context: ./validator
+      dockerfile: Dockerfile
+    command: bash validator/.docker/start.sh
+    restart: "no"
+    container_name: "validator"
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./:/app
+    networks:
+      - zip-temperature
   zip-temperature:
     build:
       context: .
@@ -6,7 +21,16 @@ services:
     command: bash .docker/start.sh
     restart: "no"
     container_name: "zip-temperature"
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
     ports:
       - "8080:8080"
     volumes:
       - ./:/app
+    depends_on:
+      - validator
+    networks:
+      - zip-temperature
+networks:
+  zip-temperature:
+    driver: bridge

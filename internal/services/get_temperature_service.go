@@ -24,6 +24,7 @@ func GetTemperatures(app *entity.App, zipcode string) (*dto.TemperatureResponseD
 	}
 
 	return &dto.TemperatureResponseDto{
+		City:       viaCepResponse.Localidade,
 		Celsius:    weatherApiResponse.Current.TempC,
 		Fahrenheit: weatherApiResponse.Current.TempF,
 		Kevin:      weatherApiResponse.Current.TempC + 273,
