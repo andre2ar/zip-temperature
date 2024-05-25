@@ -1,55 +1,109 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
-	"github.com/andre2ar/zip-temperature/validator/dto"
+	"github.com/gofiber/contrib/otelfiber"
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/gofiber/fiber/v2/middleware/requestid"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
+	oteltrace "go.opentelemetry.io/otel/trace"
 	"io"
 	"log"
 	"net/http"
 )
 
+var tracer = otel.Tracer("validator")
+
 func main() {
-	http.HandleFunc("/api/v1/temperature", temperature)
+	tp := InitTracer()
+	defer func() {
+		if err := tp.Shutdown(context.Background()); err != nil {
+			log.Printf("Error shutting down tracer provider: %v", err)
+		}
+	}()
 
-	log.Println("Listening on localhost:8081")
-	log.Fatalln(http.ListenAndServe(":8081", nil))
+	app := fiber.New()
+
+	app.Use(logger.New())
+	app.Use(requestid.New())
+	app.Use(otelfiber.Middleware())
+
+	app.Post("/api/v1/temperature", temperature)
+
+	log.Fatal(app.Listen(":8081"))
 }
 
-func temperature(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	if r.Method != http.MethodPost {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		w.Write([]byte(`{"message":"method not allowed"}`))
-		return
-	}
-
-	var input dto.Input
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(`{"message":"Invalid request"}`))
-		return
-	}
-
-	if len(input.Zipcode) != 8 {
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		w.Write([]byte(`{"message":"Invalid zipcode"}`))
-		return
-	}
-
-	zipTemperatureResponse, err := getTemperature(input)
+func InitTracer() *sdktrace.TracerProvider {
+	// Will take OTEL_EXPORTER_OTLP_ENDPOINT environment variable as the collector path
+	clientOTel := otlptracegrpc.NewClient()
+	exporter, err := otlptrace.New(context.Background(), clientOTel)
 	if err != nil {
-		log.Println(err.Error())
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`{"message":"Failed to get temperature"}`))
-		return
+		log.Fatalf("failed to initialize exporter: %e", err)
 	}
 
-	w.WriteHeader(http.StatusOK)
-	jsonData, err := json.Marshal(zipTemperatureResponse)
-	w.Write(jsonData)
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithSampler(sdktrace.AlwaysSample()),
+		sdktrace.WithBatcher(exporter),
+		sdktrace.WithResource(
+			resource.NewWithAttributes(
+				semconv.SchemaURL,
+				semconv.ServiceNameKey.String("validator"),
+			)),
+	)
+	otel.SetTracerProvider(tp)
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
+	return tp
 }
 
-func getTemperature(input dto.Input) (*dto.ZipTemperatureResponse, error) {
+type ZipTemperatureResponse struct {
+	City  string  `json:"city"`
+	TempC float64 `json:"temp_C"`
+	TempF float64 `json:"temp_F"`
+	TempK float64 `json:"temp_K"`
+}
+
+type Input struct {
+	Zipcode string `json:"zipcode"`
+}
+
+func temperature(c *fiber.Ctx) error {
+	payload := Input{}
+	err := c.BodyParser(&payload)
+	if err != nil {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
+			"message": "invalid request",
+		})
+	}
+
+	_, span := tracer.Start(c.UserContext(), "temperature", oteltrace.WithAttributes(attribute.String("zipcode", payload.Zipcode)))
+	defer span.End()
+
+	if len(payload.Zipcode) != 8 {
+		return c.Status(http.StatusUnprocessableEntity).JSON(fiber.Map{
+			"message": "invalid zipcode",
+		})
+	}
+
+	zipTemperatureResponse, err := getTemperature(payload)
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
+			"message": "failed to get temperature",
+		})
+	}
+
+	return c.JSON(zipTemperatureResponse)
+}
+
+func getTemperature(input Input) (*ZipTemperatureResponse, error) {
 	res, err := http.Get("http://host.docker.internal:8080/api/v1/temperature/" + input.Zipcode)
 	if err != nil {
 		return nil, err
@@ -61,7 +115,7 @@ func getTemperature(input dto.Input) (*dto.ZipTemperatureResponse, error) {
 	}
 
 	responseBody, _ := io.ReadAll(res.Body)
-	var zipTemperatureResponse dto.ZipTemperatureResponse
+	var zipTemperatureResponse ZipTemperatureResponse
 	err = json.Unmarshal(responseBody, &zipTemperatureResponse)
 	if err != nil {
 		return nil, err

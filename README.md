@@ -12,15 +12,17 @@ or
 
 ``docker-compose up``
 
-There is only one end-point:
+There two end-points:
 
-``localhost:8080/api/v1/temperature/:zipcode``
+- POST ``localhost:8081/api/v1/temperature``
+  - This end-point will pass through validator service
+  - Request body: {"zipcode": "valid zipcode"}
+- GET ``localhost:8080/api/v1/temperature/:zipcode``
 
 Examples request can be found on api folder.
 
 To be able to properly run the server um must add a valid WEATHER_API_KEY on app.env file. Might be necessary to restart
 the server after editing app.env file.
 
-GCP URL:
-
-https://zip-temperature-drt52ooijq-uk.a.run.app
+## Zipkin 
+- URL: http://localhost:9411/zipkin
