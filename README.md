@@ -26,3 +26,5 @@ the server after editing app.env file.
 
 ## Zipkin 
 - URL: http://localhost:9411/zipkin
+
+![img.png](zipkin.png)

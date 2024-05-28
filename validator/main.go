@@ -21,7 +21,7 @@ import (
 	"net/http"
 )
 
-var tracer = otel.Tracer("validator")
+var tracer = otel.Tracer("zipcode_validator")
 
 func main() {
 	tp := InitTracer()
@@ -84,16 +84,16 @@ func temperature(c *fiber.Ctx) error {
 		})
 	}
 
-	_, span := tracer.Start(c.UserContext(), "temperature", oteltrace.WithAttributes(attribute.String("zipcode", payload.Zipcode)))
+	_, span := tracer.Start(c.UserContext(), "request_temperature", oteltrace.WithAttributes(attribute.String("zipcode", payload.Zipcode)))
 	defer span.End()
 
-	if len(payload.Zipcode) != 8 {
+	if !isValidZipcode(c.UserContext(), payload.Zipcode) {
 		return c.Status(http.StatusUnprocessableEntity).JSON(fiber.Map{
 			"message": "invalid zipcode",
 		})
 	}
 
-	zipTemperatureResponse, err := getTemperature(payload)
+	zipTemperatureResponse, err := getTemperature(c.UserContext(), payload)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
 			"message": "failed to get temperature",
@@ -103,7 +103,10 @@ func temperature(c *fiber.Ctx) error {
 	return c.JSON(zipTemperatureResponse)
 }
 
-func getTemperature(input Input) (*ZipTemperatureResponse, error) {
+func getTemperature(ctx context.Context, input Input) (*ZipTemperatureResponse, error) {
+	_, span := tracer.Start(ctx, "get_temperature", oteltrace.WithAttributes(attribute.String("zipcode", input.Zipcode)))
+	defer span.End()
+
 	res, err := http.Get("http://host.docker.internal:8080/api/v1/temperature/" + input.Zipcode)
 	if err != nil {
 		return nil, err
@@ -122,4 +125,15 @@ func getTemperature(input Input) (*ZipTemperatureResponse, error) {
 	}
 
 	return &zipTemperatureResponse, nil
+}
+
+func isValidZipcode(ctx context.Context, zipcode string) bool {
+	_, span := tracer.Start(ctx, "validate_zipcode", oteltrace.WithAttributes(attribute.String("zipcode", zipcode)))
+	defer span.End()
+
+	if len(zipcode) != 8 {
+		return false
+	}
+
+	return true
 }

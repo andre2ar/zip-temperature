@@ -12,6 +12,8 @@ import (
 
 func GetTemperature(app *entity.App) fiber.Handler {
 	return func(ctx *fiber.Ctx) error {
+		app.Ctx = ctx.UserContext()
+
 		zipcode := ctx.Params("zipcode")
 		zipcode = strings.Replace(zipcode, "-", "", -1)
 
@@ -23,7 +25,7 @@ func GetTemperature(app *entity.App) fiber.Handler {
 			return nil
 		}
 
-		_, span := app.Tracer.Start(ctx.UserContext(), "GetTemperature", oteltrace.WithAttributes(attribute.String("zipcode", zipcode)))
+		_, span := app.Tracer.Start(app.Ctx, "request_get_temperature", oteltrace.WithAttributes(attribute.String("zipcode", zipcode)))
 		defer span.End()
 
 		temperatures, err := services.GetTemperatures(app, zipcode)
